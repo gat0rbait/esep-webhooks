@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const axios = require('axios');
 
 function signRequestBody(key, body) {
   return `sha1=${crypto.createHmac('sha1', key).update(body, 'utf-8').digest('hex')}`;
@@ -7,6 +8,7 @@ function signRequestBody(key, body) {
 module.exports.githubWebhookListener = (event, context, callback) => {
   var errMsg; // eslint-disable-line
   const token = process.env.GITHUB_WEBHOOK_SECRET;
+  const slackUrl = process.env.SLACK_URL;
   const headers = event.headers;
   const sig = headers['X-Hub-Signature'];
   const githubEvent = headers['X-GitHub-Event'];
@@ -58,15 +60,30 @@ module.exports.githubWebhookListener = (event, context, callback) => {
     });
   }
 
-  /* eslint-disable */
-  console.log('---------------------------------');
-  console.log(`Github-Event: "${githubEvent}" with action: "${event.body.action}"`);
-  console.log('---------------------------------');
-  console.log('Payload', event.body);
-  /* eslint-enable */
+  // Using URLSearchParams to parse the encoded payload
+  const params = new URLSearchParams(event.body);
 
-  // Do custom stuff here with github event data
-  // For more on events see https://developer.github.com/v3/activity/events/types/
+  // The 'payload' parameter contains the JSON string, so we get it from the params
+  const payloadJson = params.get('payload');
+
+  // Parsing the JSON string into an object
+  const payloadObject = JSON.parse(payloadJson);
+
+  //pull out github url
+  const issueUrl = payloadObject.issue.html_url;
+  const message = `Issue Created: ${issueUrl}`;
+
+  // Making the POST request to the slack webhook
+  axios.post(slackUrl, {
+    text: message
+  })
+  .then((response) => {
+    console.log(`Status: ${response.status}`);
+    console.log('Body: ', response.data);
+  })
+  .catch((error) => {
+    console.error('Error: ', error.message);
+  });
 
   const response = {
     statusCode: 200,
